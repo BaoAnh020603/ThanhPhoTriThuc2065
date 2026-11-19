@@ -1,0 +1,1168 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Thành phố Tri thức 2065 – Học tập thông minh – Khám phá tương lai</title>
+  <style>
+    :root {
+      --gold: #ffe875;
+      --cyan: #6ee7ff;
+      --navy: #0c2655;
+      --orange: #f58216;
+    }
+    * {
+      box-sizing: border-box;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+    body {
+      margin: 0;
+      padding: 0;
+      background: radial-gradient(circle at center, #0e2a5c 0%, #051026 100%);
+      font-family: "Segoe UI", Tahoma, Arial, sans-serif;
+      color: #fff;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+    }
+    .topbar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      align-items: center;
+      justify-content: center;
+      padding: 8px 16px;
+      background: rgba(8, 25, 62, 0.88);
+      border: 1px solid rgba(110, 231, 255, 0.45);
+      border-radius: 999px;
+      margin-bottom: 10px;
+      box-shadow: 0 6px 20px rgba(0, 0, 0, 0.45);
+      z-index: 20;
+    }
+    .topbar span.brand {
+      font-weight: 800;
+      color: var(--gold);
+      margin-right: 6px;
+      font-size: 14px;
+      letter-spacing: 0.3px;
+    }
+    .topbar button {
+      background: linear-gradient(180deg, #1e62c8 0%, #103b85 100%);
+      color: #fff;
+      border: 1.5px solid rgba(130, 225, 255, 0.75);
+      border-radius: 999px;
+      padding: 5px 13px;
+      font-family: inherit;
+      font-size: 13px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: transform 0.15s, filter 0.15s, border-color 0.15s;
+    }
+    .topbar button:hover {
+      filter: brightness(1.18);
+      transform: translateY(-1px);
+      border-color: var(--gold);
+    }
+    .topbar button.active {
+      background: linear-gradient(180deg, #ff9d2e 0%, #d45b08 100%);
+      border-color: #fff3a1;
+      box-shadow: 0 0 12px rgba(255, 168, 46, 0.7);
+    }
+    #stage-wrap {
+      position: relative;
+      width: min(96vw, calc(86vh * (16 / 9)));
+      aspect-ratio: 16 / 9;
+      border-radius: 18px;
+      overflow: hidden;
+      box-shadow: 0 18px 50px rgba(0, 0, 0, 0.75), 0 0 0 2px rgba(110, 231, 255, 0.45);
+      background: #081b3e;
+    }
+    canvas {
+      width: 100%;
+      height: 100%;
+      display: block;
+      cursor: pointer;
+    }
+  </style>
+</head>
+<body>
+  <div class="topbar">
+    <span class="brand">★ THÀNH PHỐ TRI THỨC 2065:</span>
+    <button id="btn-scr-menu" class="active" onclick="switchScreen('menu')">1. Menu chính</button>
+    <button id="btn-scr-hub" onclick="switchScreen('hub')">2. Sảnh nhân vật</button>
+    <button id="btn-scr-map" onclick="switchScreen('map')">3. Bản đồ 6 TP</button>
+    <button id="btn-scr-popup" onclick="openPopupDemo()">4. Popup Nhiệm vụ</button>
+    <button id="btn-scr-quiz" onclick="switchScreen('quiz')">5. Màn chơi Trắc nghiệm</button>
+    <button id="btn-sound" onclick="toggleSound()">🔊 Âm thanh: BẬT</button>
+    <button onclick="toggleFullScreen()">⛶ Toàn màn hình</button>
+  </div>
+
+  <div id="stage-wrap">
+    <canvas id="gameCanvas" width="1280" height="720"></canvas>
+  </div>
+
+  <script>
+    const canvas = document.getElementById("gameCanvas");
+    const ctx = canvas.getContext("2d");
+
+    // Tải toàn bộ hình nền và ảnh thu nhỏ 6 thành phố đã làm sạch
+    const images = {};
+    const imageSources = {
+      menu: "assets/spr_bg_menu.png",
+      hub: "assets/spr_bg_hub.png",
+      map: "assets/spr_bg_map.png",
+      popup: "assets/spr_bg_popup.png",
+      quiz: "assets/spr_bg_quiz.png",
+      thumb0: "assets/spr_city_thumb_0.png",
+      thumb1: "assets/spr_city_thumb_1.png",
+      thumb2: "assets/spr_city_thumb_2.png",
+      thumb3: "assets/spr_city_thumb_3.png",
+      thumb4: "assets/spr_city_thumb_4.png",
+      thumb5: "assets/spr_city_thumb_5.png"
+    };
+
+    let loadedCount = 0;
+    const totalImages = Object.keys(imageSources).length;
+    for (const [key, src] of Object.entries(imageSources)) {
+      const img = new Image();
+      img.onload = () => { loadedCount++; };
+      img.src = src;
+      images[key] = img;
+    }
+
+    // Hệ thống âm thanh Web Audio API + Giọng đọc tiếng Việt
+    let audioCtx = null;
+    function playTone(freq, duration = 0.12, type = "sine", vol = 0.15) {
+      if (!state.soundEnabled) return;
+      try {
+        if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.type = type;
+        osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
+        gain.gain.setValueAtTime(vol, audioCtx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + duration);
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+        osc.start();
+        osc.stop(audioCtx.currentTime + duration);
+      } catch (e) {}
+    }
+
+    function sfxClick() { playTone(660, 0.09, "triangle", 0.16); }
+    function sfxCorrect() {
+      playTone(523.25, 0.1, "triangle", 0.18);
+      setTimeout(() => playTone(659.25, 0.1, "triangle", 0.18), 90);
+      setTimeout(() => playTone(783.99, 0.22, "triangle", 0.2), 180);
+    }
+    function sfxWrong() {
+      playTone(260, 0.15, "sawtooth", 0.14);
+      setTimeout(() => playTone(210, 0.22, "sawtooth", 0.14), 130);
+    }
+    function speakVietnamese(text) {
+      if (!state.soundEnabled || !("speechSynthesis" in window)) return;
+      try {
+        window.speechSynthesis.cancel();
+        const u = new SpeechSynthesisUtterance(text);
+        u.lang = "vi-VN";
+        u.rate = 1.02;
+        window.speechSynthesis.speak(u);
+      } catch (e) {}
+    }
+
+    // Dữ liệu 6 Thành phố & 30 câu hỏi trắc nghiệm
+    const state = {
+      screen: "menu", // "menu", "hub", "map", "quiz"
+      playerName: "Minh Khám phá gia",
+      playerLevel: 1,
+      playerXp: 20,
+      playerXpMax: 100,
+      playerStars: 120,
+      selectedCity: 0,
+      showMissionPopup: false,
+      activeModal: "", // "", "achievements", "treasure", "ai_helper", "gift", "leaderboard", "help", "settings"
+      dailyGiftClaimed: false,
+      soundEnabled: true,
+      musicEnabled: true,
+      hubSpeechIndex: 0,
+      aiTipIndex: 0,
+      treasurePage: 0,
+      mouseX: 0,
+      mouseY: 0,
+      hubSpeeches: [
+        "Cùng mình khám phá Thành phố Tri thức 2065 nhé!",
+        "Đồng Nai năm 2065 là siêu đô thị thông minh, xanh và hiện đại!",
+        "Hoàn thành nhiệm vụ ở 6 thành phố để sưu tầm trọn bộ Huy hiệu Tri thức!",
+        "Nhấn vào 'Nhiệm vụ hôm nay' hoặc 'Bản đồ' để bắt đầu hành trình nhé!"
+      ],
+      aiTips: [
+        "Mẹo Toán học: Khi nhân một số với 4, bạn có thể nhân đôi số đó hai lần liên tiếp! Ví dụ: 25 x 2 = 50, 50 x 2 = 100.",
+        "Kiến thức Đồng Nai 2065: Cảng hàng không quốc tế Long Thành là cửa ngõ giao thương hàng không hiện đại bậc nhất khu vực!",
+        "Mẹo Khoa học & Xanh: Năng lượng mặt trời và năng lượng gió không tạo ra khí thải nhà kính, giúp bảo vệ Trái Đất xanh sạch.",
+        "Kỹ năng AI 2065: Trí tuệ nhân tạo (AI) giúp điều phối giao thông thông minh, hỗ trợ y tế và cá nhân hóa việc học tập mỗi ngày!"
+      ],
+      quiz: {
+        qIndex: 0,
+        correctCount: 0,
+        selectedOption: -1,
+        answered: false,
+        finished: false,
+        rewardGranted: false,
+        timeLeft: 45.0,
+        robotMsg: "Hãy chọn đáp án đúng nhé!"
+      },
+      cities: [
+        {
+          id: 0,
+          name: "Thành phố Toán học",
+          badgeName: "Huy hiệu Toán học",
+          desc: "Hãy giúp thành phố giải mã bài toán để mở khóa cánh cổng tri thức nhé!",
+          missions: ["Giải 5 bài toán tính nhẩm", "Trả lời đúng ít nhất 4 câu", "Thời gian: 3 phút"],
+          rewardStars: 20,
+          rewardXp: 30,
+          completed: false,
+          bestScore: 0,
+          treasureTitle: "Bí mật Toán học Đô thị 2065",
+          treasureFact: "Mọi tòa nhà chọc trời và mạng lưới tàu điện ngầm tại Thành phố Tri thức 2065 đều được thiết kế bằng các thuật toán hình học và tối ưu hóa năng lượng chính xác đến từng mi-li-mét!",
+          questions: [
+            {
+              q: "Một trạm năng lượng mặt trời tạo ra 25 đơn vị điện mỗi giờ. Hỏi trong 4 giờ trạm tạo ra bao nhiêu đơn vị điện?",
+              options: ["A. 80", "B. 90", "C. 100", "D. 120"],
+              ans: 2,
+              explain: "Chính xác! 25 x 4 = 100 đơn vị điện."
+            },
+            {
+              q: "Tàu điện trên không chở 45 hành khách ở toa đầu và 38 hành khách ở toa sau. Hỏi cả hai toa có bao nhiêu hành khách?",
+              options: ["A. 73", "B. 83", "C. 85", "D. 93"],
+              ans: 1,
+              explain: "Tuyệt vời! 45 + 38 = 83 hành khách."
+            },
+            {
+              q: "Vườn ươm thông minh trồng 6 hàng cây xanh, mỗi hàng có 15 cây. Hỏi vườn ươm có tất cả bao nhiêu cây xanh?",
+              options: ["A. 75", "B. 80", "C. 90", "D. 96"],
+              ans: 2,
+              explain: "Đúng rồi! 6 x 15 = 90 cây xanh."
+            },
+            {
+              q: "Thư viện số có 120 quyển sách khoa học, chia đều vào 4 kệ thông minh. Hỏi mỗi kệ có bao nhiêu quyển sách?",
+              options: ["A. 25", "B. 30", "C. 35", "D. 40"],
+              ans: 1,
+              explain: "Xuất sắc! 120 : 4 = 30 quyển sách mỗi kệ."
+            },
+            {
+              q: "Một robot giao hàng tự hành đi được 18 km mỗi giờ. Trong 3 giờ liên tục, robot đi được quãng đường bao nhiêu ki-lô-mét?",
+              options: ["A. 48 km", "B. 52 km", "C. 54 km", "D. 60 km"],
+              ans: 2,
+              explain: "Chính xác! 18 x 3 = 54 km."
+            }
+          ]
+        },
+        {
+          id: 1,
+          name: "Vương quốc Ngôn ngữ",
+          badgeName: "Huy hiệu Ngôn ngữ",
+          desc: "Khám phá kho tàng tiếng Việt phong phú và cầu nối ngoại ngữ quốc tế của công dân toàn cầu!",
+          missions: ["Vượt qua 5 thử thách từ vựng", "Trả lời đúng ít nhất 4 câu", "Thời gian: 3 phút"],
+          rewardStars: 20,
+          rewardXp: 30,
+          completed: false,
+          bestScore: 0,
+          treasureTitle: "Ngôn ngữ & Giao lưu Quốc tế",
+          treasureFact: "Công dân Thành phố Tri thức 2065 vừa gìn giữ sự trong sáng của tiếng Việt, vừa thông thạo ngoại ngữ và ngôn ngữ lập trình để kết nối với bạn bè khắp năm châu!",
+          questions: [
+            {
+              q: "Từ nào dưới đây viết ĐÚNG chính tả tiếng Việt?",
+              options: ["A. Sáng kiến", "B. Xáng kiến", "C. Sáng kiếng", "D. Xáng kiếng"],
+              ans: 0,
+              explain: "Chính xác! 'Sáng kiến' là cách viết đúng chính tả."
+            },
+            {
+              q: "Câu tục ngữ 'Đi một ngày đàng, học một sàng khôn' khuyên chúng ta điều gì?",
+              options: ["A. Nên đi bộ thật nhanh", "B. Đi xa, trải nghiệm để mở mang tri thức", "C. Nên mua nhiều sàng", "D. Chỉ học ở trong nhà"],
+              ans: 1,
+              explain: "Đúng rồi! Đi nhiều nơi và khám phá giúp ta học hỏi thêm nhiều điều hay."
+            },
+            {
+              q: "Trong tiếng Anh, cụm từ 'Smart City' có nghĩa tiếng Việt là gì?",
+              options: ["A. Thành phố cổ kính", "B. Thành phố thông minh", "C. Nông trại vui vẻ", "D. Trạm vũ trụ"],
+              ans: 1,
+              explain: "Tuyệt vời! 'Smart City' nghĩa là Thành phố thông minh."
+            },
+            {
+              q: "Từ nào đồng nghĩa với từ 'Siêng năng'?",
+              options: ["A. Lười biếng", "B. Chăm chỉ", "C. Chậm chạp", "D. Vội vàng"],
+              ans: 1,
+              explain: "Chính xác! 'Chăm chỉ', 'cần cù' đồng nghĩa với 'siêng năng'."
+            },
+            {
+              q: "Điền từ thích hợp vào câu: 'Học tập thông minh - ... tương lai'?",
+              options: ["A. Khám phá", "B. Ngủ quên", "C. Bỏ qua", "D. Chờ đợi"],
+              ans: 0,
+              explain: "Xuất sắc! Khẩu hiệu của chúng ta là 'Học tập thông minh - Khám phá tương lai'."
+            }
+          ]
+        },
+        {
+          id: 2,
+          name: "Thành phố Khoa học",
+          badgeName: "Huy hiệu Khoa học",
+          desc: "Thực hiện các thí nghiệm kỳ thú về vũ trụ, vật lý và công nghệ năng lượng sạch tương lai!",
+          missions: ["Giải mã 5 hiện tượng khoa học", "Trả lời đúng ít nhất 4 câu", "Thời gian: 3 phút"],
+          rewardStars: 20,
+          rewardXp: 30,
+          completed: false,
+          bestScore: 0,
+          treasureTitle: "Trung tâm Nghiên cứu Khoa học 2065",
+          treasureFact: "Các phòng thí nghiệm tại Thành phố Khoa học ứng dụng công nghệ vật liệu siêu dẫn và quang hợp nhân tạo, biến ánh nắng mặt trời thành nguồn năng lượng vô tận!",
+          questions: [
+            {
+              q: "Nguồn năng lượng nào sau đây là năng lượng sạch và tái tạo được?",
+              options: ["A. Than đá", "B. Dầu mỏ", "C. Năng lượng mặt trời", "D. Khí đốt hóa thạch"],
+              ans: 2,
+              explain: "Chính xác! Năng lượng mặt trời là năng lượng tái tạo xanh và sạch."
+            },
+            {
+              q: "Hành tinh nào được mệnh danh là 'Hành tinh Xanh' - ngôi nhà của sự sống chúng ta?",
+              options: ["A. Sao Hỏa", "B. Trái Đất", "C. Sao Mộc", "D. Sao Kim"],
+              ans: 1,
+              explain: "Đúng rồi! Trái Đất là Hành tinh Xanh của chúng ta."
+            },
+            {
+              q: "Ở điều kiện tiêu chuẩn, nước tinh khiết sôi ở nhiệt độ bao nhiêu độ C?",
+              options: ["A. 50 độ C", "B. 80 độ C", "C. 100 độ C", "D. 150 độ C"],
+              ans: 2,
+              explain: "Tuyệt vời! Nước sôi ở 100 độ C."
+            },
+            {
+              q: "Bộ phận nào của cây xanh thực hiện quá trình quang hợp tạo ra khí Ô-xy?",
+              options: ["A. Lá cây", "B. Rễ cây", "C. Hạt giống", "D. Vỏ cây khô"],
+              ans: 0,
+              explain: "Chính xác! Lá cây chứa chất diệp lục giúp quang hợp dưới ánh sáng mặt trời."
+            },
+            {
+              q: "Lực nào giữ cho con người và vạn vật đứng vững trên bề mặt Trái Đất?",
+              options: ["A. Lực đẩy Ác-si-mét", "B. Lực hấp dẫn (Trọng lực)", "C. Lực gió", "D. Lực đàn hồi"],
+              ans: 1,
+              explain: "Xuất sắc! Lực hấp dẫn của Trái Đất giữ mọi vật trên mặt đất."
+            }
+          ]
+        },
+        {
+          id: 3,
+          name: "Thành phố Xanh",
+          badgeName: "Huy hiệu Môi trường",
+          desc: "Chung tay bảo vệ rừng sinh thái, phân loại rác thông minh và xây dựng đô thị không khói bụi!",
+          missions: ["Hoàn thành 5 thử thách sống xanh", "Trả lời đúng ít nhất 4 câu", "Thời gian: 3 phút"],
+          rewardStars: 20,
+          rewardXp: 30,
+          completed: false,
+          bestScore: 0,
+          treasureTitle: "Lá phổi Sinh thái Đồng Nai",
+          treasureFact: "Khu dự trữ sinh quyển thế giới Cát Tiên và hồ Trị An là lá phổi xanh quý giá của vùng Đông Nam Bộ, nơi bảo tồn hàng ngàn loài động thực vật quý hiếm!",
+          questions: [
+            {
+              q: "Hành động nào sau đây giúp bảo vệ môi trường tại Thành phố Xanh?",
+              options: ["A. Xả rác bừa bãi", "B. Phân loại rác tại nguồn và tái chế", "C. Đốt túi ni-lông", "D. Lãng phí nước sạch"],
+              ans: 1,
+              explain: "Chính xác! Phân loại rác và tái chế giúp giảm ô nhiễm môi trường."
+            },
+            {
+              q: "Vườn quốc gia nổi tiếng nào nằm trên địa bàn tỉnh Đồng Nai được UNESCO công nhận là Khu dự trữ sinh quyển thế giới?",
+              options: ["A. Vườn quốc gia Cát Tiên", "B. Vườn quốc gia Cúc Phương", "C. Vườn quốc gia Phong Nha", "D. Vườn quốc gia Ba Vì"],
+              ans: 0,
+              explain: "Tuyệt vời! Vườn quốc gia Cát Tiên là niềm tự hào sinh thái của Đồng Nai."
+            },
+            {
+              q: "Nguyên tắc 3R trong bảo vệ môi trường gồm: Reduce (Giảm thiểu), Reuse (Tái sử dụng) và gì nữa?",
+              options: ["A. Recycle (Tái chế)", "B. Remove (Vứt bỏ)", "C. Run (Chạy nhanh)", "D. Repeat (Lặp lại)"],
+              ans: 0,
+              explain: "Đúng rồi! 3R là Reduce - Reuse - Recycle."
+            },
+            {
+              q: "Phương tiện giao thông nào thân thiện nhất với môi trường đô thị?",
+              options: ["A. Xe chạy xăng cũ khói đen", "B. Tàu điện và xe đạp công cộng", "C. Xe tải hạng nặng", "D. Tàu chạy than đá"],
+              ans: 1,
+              explain: "Chính xác! Tàu điện và xe đạp không phát thải khói bụi độc hại."
+            },
+            {
+              q: "Trồng nhiều cây xanh trong thành phố mang lại lợi ích gì?",
+              options: ["A. Hấp thụ khí CO2, tỏa bóng mát và tạo khí Ô-xy", "B. Làm thành phố nóng hơn", "C. Tốn diện tích vô ích", "D. Gây tiếng ồn"],
+              ans: 0,
+              explain: "Xuất sắc! Cây xanh là máy lọc không khí tự nhiên tuyệt vời nhất."
+            }
+          ]
+        },
+        {
+          id: 4,
+          name: "Thành phố Lịch sử - Văn hóa",
+          badgeName: "Huy hiệu Văn hóa",
+          desc: "Tìm hiểu truyền thống hào hùng của vùng đất Biên Hòa - Đồng Nai và văn hóa dân tộc Việt Nam!",
+          missions: ["Trả lời 5 câu hỏi Lịch sử - Văn hóa", "Trả lời đúng ít nhất 4 câu", "Thời gian: 3 phút"],
+          rewardStars: 20,
+          rewardXp: 30,
+          completed: false,
+          bestScore: 0,
+          treasureTitle: "Hào khí Đồng Nai vươn tầm",
+          treasureFact: "Văn miếu Trấn Biên (xây dựng năm 1715) là văn miếu đầu tiên ở phương Nam, biểu tượng cho truyền thống hiếu học, trọng nhân tài của vùng đất Biên Hòa - Đồng Nai!",
+          questions: [
+            {
+              q: "Di tích lịch sử nào tại Biên Hòa - Đồng Nai được mệnh danh là Văn miếu đầu tiên của vùng đất phương Nam?",
+              options: ["A. Văn miếu Trấn Biên", "B. Chùa Một Cột", "C. Tháp Chăm", "D. Thành Cổ Loa"],
+              ans: 0,
+              explain: "Chính xác! Văn miếu Trấn Biên là biểu tượng văn hóa - hiếu học của Đồng Nai."
+            },
+            {
+              q: "Dự án Cảng hàng không quốc tế quy mô lớn bậc nhất Việt Nam đang phát triển tại tỉnh Đồng Nai có tên là gì?",
+              options: ["A. Sân bay Nội Bài", "B. Sân bay quốc tế Long Thành", "C. Sân bay Phú Quốc", "D. Sân bay Cam Ranh"],
+              ans: 1,
+              explain: "Tuyệt vời! Sân bay quốc tế Long Thành giúp Đồng Nai vươn tầm cực tăng trưởng!"
+            },
+            {
+              q: "Dòng sông lớn nào gắn liền với lịch sử, văn hóa và đời sống của người dân tỉnh Đồng Nai?",
+              options: ["A. Sông Hồng", "B. Sông Hương", "C. Sông Đồng Nai", "D. Sông Hàn"],
+              ans: 2,
+              explain: "Đúng rồi! Sông Đồng Nai hiền hòa bồi đắp phù sa và nguồn nước cho toàn vùng."
+            },
+            {
+              q: "Làng nghề truyền thống nào ở Biên Hòa - Đồng Nai nổi tiếng khắp trong và ngoài nước?",
+              options: ["A. Nghề làm gốm Biên Hòa", "B. Nghề làm nón bài thơ", "C. Nghề dệt thổ cẩm Tây Bắc", "D. Nghề làm đàn bầu"],
+              ans: 0,
+              explain: "Chính xác! Gốm Biên Hòa nổi tiếng với dòng men xanh đồng trổ bông độc đáo."
+            },
+            {
+              q: "Hồ thủy điện lớn nào tại Đồng Nai cung cấp điện năng và nước sinh hoạt cho cả miền Nam?",
+              options: ["A. Hồ Hòa Bình", "B. Hồ Trị An", "C. Hồ Ba Bể", "D. Hồ Xuân Hương"],
+              ans: 1,
+              explain: "Xuất sắc! Thủy điện Trị An là công trình năng lượng lịch sử trên sông Đồng Nai."
+            }
+          ]
+        },
+        {
+          id: 5,
+          name: "Trung tâm AI Tương lai",
+          badgeName: "Huy hiệu AI 2065",
+          desc: "Khám phá trí tuệ nhân tạo, robot thông minh và công nghệ số kiến tạo tương lai năm 2065!",
+          missions: ["Chinh phục 5 câu hỏi Công nghệ AI", "Trả lời đúng ít nhất 4 câu", "Thời gian: 3 phút"],
+          rewardStars: 20,
+          rewardXp: 30,
+          completed: false,
+          bestScore: 0,
+          treasureTitle: "Trí tuệ Nhân tạo vì Con người",
+          treasureFact: "Tại Trung tâm AI Tương lai 2065, AI là người bạn đồng hành giúp học sinh học tập thông minh, hỗ trợ bác sĩ chữa bệnh và dự báo thời tiết chính xác!",
+          questions: [
+            {
+              q: "Chữ viết tắt 'AI' trong công nghệ thông tin có nghĩa là gì?",
+              options: ["A. Trí tuệ nhân tạo (Artificial Intelligence)", "B. Trò chơi điện tử", "C. Máy tính bỏ túi", "D. Mạng dây cáp đồng"],
+              ans: 0,
+              explain: "Chính xác! AI là viết tắt của Artificial Intelligence (Trí tuệ nhân tạo)."
+            },
+            {
+              q: "Khi sử dụng Trợ lý AI trong học tập, cách làm nào sau đây là THÔNG MINH nhất?",
+              options: ["A. Nhờ AI giải thích bài khó để hiểu sâu kiến thức", "B. Chép nguyên văn mà không suy nghĩ", "C. Không bao giờ tự làm bài", "D. Dùng AI để gian lận khi thi"],
+              ans: 0,
+              explain: "Tuyệt vời! AI là người bạn đồng hành giúp ta hiểu bài và tư duy tốt hơn."
+            },
+            {
+              q: "Để giữ an toàn thông tin cá nhân trên mạng Internet, em KHÔNG nên làm điều gì?",
+              options: ["A. Đặt mật khẩu mạnh", "B. Chia sẻ mật khẩu và thông tin cá nhân cho người lạ", "C. Hỏi ý kiến cha mẹ, thầy cô", "D. Sử dụng phần mềm an toàn"],
+              ans: 1,
+              explain: "Đúng rồi! Tuyệt đối không chia sẻ mật khẩu cho người lạ trên mạng."
+            },
+            {
+              q: "Trong Thành phố Tri thức 2065, cảm biến IoT và AI giúp hệ thống đèn giao thông hoạt động như thế nào?",
+              options: ["A. Tự động điều chỉnh nhịp đèn thông minh để chống ùn tắc", "B. Tắt hết đèn cả ngày", "C. Chỉ bật đèn đỏ mãi mãi", "D. Nhấp nháy ngẫu nhiên"],
+              ans: 0,
+              explain: "Chính xác! Giao thông thông minh dùng AI để phân luồng xe êm thuận, an toàn."
+            },
+            {
+              q: "Yếu tố quan trọng nhất để làm chủ công nghệ trong tương lai năm 2065 là gì?",
+              options: ["A. Không ngừng học tập, sáng tạo và rèn luyện đạo đức tốt", "B. Chỉ chơi game suốt ngày", "C. Ngừng đọc sách", "D. Phụ thuộc hoàn toàn vào máy móc"],
+              ans: 0,
+              explain: "Xuất sắc! Tri thức, sự sáng tạo và nhân cách chính là chìa khóa của tương lai!"
+            }
+          ]
+        }
+      ]
+    };
+
+    const islands = [
+      { x1: 135, y1: 130, x2: 415, y2: 336, cx: 301, cy: 297 },
+      { x1:  95, y1: 370, x2: 390, y2: 572, cx: 271, cy: 531 },
+      { x1: 460, y1:  20, x2: 735, y2: 250, cx: 617, cy: 213 },
+      { x1: 850, y1: 105, x2: 1140, y2: 326, cx: 1018, cy: 287 },
+      { x1: 495, y1: 405, x2: 825, y2: 602, cx: 686, cy: 565 },
+      { x1: 950, y1: 335, x2: 1245, y2: 572, cx: 1129, cy: 531 }
+    ];
+
+    const quizBoxes = [
+      { x1: 276, y1: 374, x2: 718, y2: 450 },
+      { x1: 754, y1: 374, x2: 1196, y2: 450 },
+      { x1: 276, y1: 462, x2: 718, y2: 538 },
+      { x1: 754, y1: 462, x2: 1196, y2: 538 }
+    ];
+
+    function inBox(px, py, x1, y1, x2, y2) {
+      return px >= x1 && px <= x2 && py >= y1 && py <= y2;
+    }
+
+    function addRewards(stars, xp) {
+      state.playerStars += stars;
+      state.playerXp += xp;
+      while (state.playerXp >= state.playerXpMax) {
+        state.playerXp -= state.playerXpMax;
+        state.playerLevel++;
+        state.playerXpMax = 100 + (state.playerLevel - 1) * 50;
+      }
+    }
+
+    function resetQuiz() {
+      state.quiz.qIndex = 0;
+      state.quiz.correctCount = 0;
+      state.quiz.selectedOption = -1;
+      state.quiz.answered = false;
+      state.quiz.finished = false;
+      state.quiz.rewardGranted = false;
+      state.quiz.timeLeft = 45.0;
+      state.quiz.robotMsg = "Hãy chọn đáp án đúng nhé!";
+    }
+
+    function updateTopbarButtons() {
+      document.querySelectorAll(".topbar button").forEach(b => b.classList.remove("active"));
+      if (state.showMissionPopup) {
+        document.getElementById("btn-scr-popup").classList.add("active");
+      } else {
+        const el = document.getElementById("btn-scr-" + state.screen);
+        if (el) el.classList.add("active");
+      }
+    }
+
+    function switchScreen(scr) {
+      sfxClick();
+      state.activeModal = "";
+      state.showMissionPopup = false;
+      state.screen = scr;
+      if (scr === "quiz") resetQuiz();
+      updateTopbarButtons();
+    }
+
+    function openPopupDemo() {
+      sfxClick();
+      state.activeModal = "";
+      if (state.screen !== "map" && state.screen !== "hub") {
+        state.screen = "map";
+      }
+      state.showMissionPopup = true;
+      updateTopbarButtons();
+    }
+
+    function toggleSound() {
+      state.soundEnabled = !state.soundEnabled;
+      document.getElementById("btn-sound").textContent = state.soundEnabled ? "🔊 Âm thanh: BẬT" : "🔇 Âm thanh: TẮT";
+      if (state.soundEnabled) sfxClick();
+    }
+
+    function toggleFullScreen() {
+      if (!document.fullscreenElement) {
+        document.documentElement.requestFullscreen().catch(() => {});
+      } else {
+        document.exitFullscreen().catch(() => {});
+      }
+    }
+
+    // Các hàm vẽ UI & Chữ tiếng Việt sắc nét
+    function drawTextOutlined(text, x, y, fontPx, fill = "#ffffff", outline = "#0b2454", align = "center", baseline = "middle") {
+      ctx.save();
+      ctx.font = `800 ${fontPx}px "Segoe UI", Tahoma, Arial, sans-serif`;
+      ctx.textAlign = align;
+      ctx.textBaseline = baseline;
+      ctx.lineJoin = "round";
+      ctx.miterLimit = 2;
+
+      ctx.fillStyle = "rgba(0,0,0,0.6)";
+      ctx.fillText(text, x + 2, y + 3);
+
+      ctx.lineWidth = Math.max(4, Math.round(fontPx * 0.22));
+      ctx.strokeStyle = outline;
+      ctx.strokeText(text, x, y);
+
+      ctx.fillStyle = fill;
+      ctx.fillText(text, x, y);
+      ctx.restore();
+    }
+
+    function drawWrappedText(text, x, y, maxWidth, lineHeight, fontPx, fill = "#ffffff", outline = "#0b2454", align = "center") {
+      ctx.save();
+      ctx.font = `700 ${fontPx}px "Segoe UI", Tahoma, Arial, sans-serif`;
+      const words = text.split(" ");
+      const lines = [];
+      let currentLine = words[0] || "";
+
+      for (let i = 1; i < words.length; i++) {
+        const word = words[i];
+        const width = ctx.measureText(currentLine + " " + word).width;
+        if (width < maxWidth) {
+          currentLine += " " + word;
+        } else {
+          lines.push(currentLine);
+          currentLine = word;
+        }
+      }
+      lines.push(currentLine);
+      ctx.restore();
+
+      const startY = y - ((lines.length - 1) * lineHeight) / 2;
+      for (let i = 0; i < lines.length; i++) {
+        drawTextOutlined(lines[i], x, startY + i * lineHeight, fontPx, fill, outline, align, "middle");
+      }
+    }
+
+    function drawRoundRect(x1, y1, x2, y2, r, fillStyle, strokeStyle, lineWidth = 2) {
+      ctx.save();
+      ctx.beginPath();
+      ctx.roundRect(x1, y1, x2 - x1, y2 - y1, r);
+      if (fillStyle) {
+        ctx.fillStyle = fillStyle;
+        ctx.fill();
+      }
+      if (strokeStyle) {
+        ctx.lineWidth = lineWidth;
+        ctx.strokeStyle = strokeStyle;
+        ctx.stroke();
+      }
+      ctx.restore();
+    }
+
+    function drawHoverEffect(x1, y1, x2, y2, r, color = "rgba(255, 235, 110, 0.3)") {
+      const pulse = 0.22 + 0.1 * Math.sin(performance.now() * 0.008);
+      drawRoundRect(x1, y1, x2, y2, r, color.replace("0.3", pulse.toFixed(2)), "#ffe875", 3);
+    }
+
+    function drawPillButton(x1, y1, x2, y2, label, bgCol, borderCol, isHover, fontPx = 18) {
+      const r = (y2 - y1) / 2;
+      drawRoundRect(x1 + 2, y1 + 4, x2 + 2, y2 + 4, r, "rgba(0,0,0,0.45)", null);
+      drawRoundRect(x1, y1, x2, y2, r, isHover ? "#f59e0b" : bgCol, isHover ? "#fff3a1" : borderCol, 2.5);
+      drawTextOutlined(label, (x1 + x2) / 2, (y1 + y2) / 2, fontPx, "#ffffff", "#0b2558");
+    }
+
+    // Vẽ Màn hình 1: Menu chính
+    function renderMenu() {
+      ctx.drawImage(images.menu, 0, 0, 1280, 720);
+      const mx = state.mouseX, my = state.mouseY;
+
+      if (!state.activeModal) {
+        if (inBox(mx, my, 816, 376, 1244, 478)) drawHoverEffect(816, 376, 1244, 478, 48);
+        if (inBox(mx, my, 930, 490, 1188, 558)) drawHoverEffect(930, 490, 1188, 558, 32);
+        if (inBox(mx, my, 930, 562, 1188, 630)) drawHoverEffect(930, 562, 1188, 630, 32);
+        if (inBox(mx, my, 930, 634, 1188, 702)) drawHoverEffect(930, 634, 1188, 702, 32);
+      }
+
+      drawTextOutlined("Bắt đầu chơi", 1075, 426, 33, "#ffffff", "#873205");
+      drawTextOutlined("Thành tích", 1082, 524, 24, "#ffffff", "#0f2d5f");
+      drawTextOutlined("Cài đặt", 1082, 596, 24, "#ffffff", "#0f2d5f");
+      drawTextOutlined("Thoát game", 1082, 668, 24, "#ffffff", "#73141e");
+
+      drawPillButton(1045, 18, 1262, 66, "Bản đồ 6 TP >>", "#185cb9", "#78e1ff", !state.activeModal && inBox(mx, my, 1045, 18, 1262, 66), 18);
+    }
+
+    // Vẽ Màn hình 2: Sảnh nhân vật (Player Hub)
+    function renderHub() {
+      ctx.drawImage(images.hub, 0, 0, 1280, 720);
+      const mx = state.mouseX, my = state.mouseY;
+      const canHover = !state.showMissionPopup && !state.activeModal;
+
+      drawTextOutlined(state.playerName, 410, 44, 25, "#ffffff", "#0c2655");
+      drawTextOutlined("Lv." + state.playerLevel, 266, 118, 26, "#fff082", "#5f2d05");
+      drawTextOutlined(state.playerXp + " / " + state.playerXpMax, 518, 118, 21, "#ffffff", "#5f2d05");
+      drawTextOutlined(String(state.playerStars), 1096, 49, 26, "#fff287", "#142d5f");
+
+      if (canHover) {
+        if (inBox(mx, my, 896, 120, 1268, 238)) drawHoverEffect(896, 120, 1268, 238, 42);
+        if (inBox(mx, my, 896, 246, 1268, 360)) drawHoverEffect(896, 246, 1268, 360, 42);
+        if (inBox(mx, my, 896, 368, 1268, 482)) drawHoverEffect(896, 368, 1268, 482, 42);
+        if (inBox(mx, my, 896, 490, 1268, 604)) drawHoverEffect(896, 490, 1268, 604, 42);
+        if (inBox(mx, my, 42, 578, 758, 692)) drawHoverEffect(42, 578, 758, 692, 44);
+      }
+
+      drawTextOutlined("Nhiệm vụ hôm nay", 1138, 180, 24, "#ffffff", "#0f2a5c");
+      drawTextOutlined("Kho báu Tri thức", 1138, 304, 24, "#ffffff", "#0f2a5c");
+      drawTextOutlined("Thành tích", 1138, 424, 24, "#ffffff", "#0f2a5c");
+      drawTextOutlined("Trợ lý AI", 1138, 546, 24, "#ffffff", "#0f2a5c");
+
+      drawWrappedText(state.hubSpeeches[state.hubSpeechIndex], 456, 635, 510, 26, 20, "#ffffff", "#0c2652");
+
+      drawPillButton(730, 20, 915, 76, "< Về Menu", "#1955af", "#78dcff", canHover && inBox(mx, my, 730, 20, 915, 76), 18);
+      drawPillButton(780, 618, 1264, 692, "Bản đồ 6 Thành phố >>", "#ee8016", "#fff08c", canHover && inBox(mx, my, 780, 618, 1264, 692), 23);
+    }
+
+    // Vẽ Màn hình 3: Bản đồ 6 Thành phố (World Map)
+    function renderMap() {
+      ctx.drawImage(images.map, 0, 0, 1280, 720);
+      const mx = state.mouseX, my = state.mouseY;
+      const canHover = !state.showMissionPopup && !state.activeModal;
+
+      drawTextOutlined(state.playerName, 278, 37, 16, "#ffffff", "#0c2655");
+      drawTextOutlined(String(state.playerStars), 253, 86, 21, "#fff07d", "#142d5f");
+
+      drawPillButton(415, 18, 615, 70, "< Sảnh nhân vật", "#1858b4", "#78e1ff", canHover && inBox(mx, my, 415, 18, 615, 70), 18);
+
+      if (canHover) {
+        if (inBox(mx, my, 876, 8, 986, 110)) drawHoverEffect(876, 8, 986, 110, 20);
+        if (inBox(mx, my, 994, 8, 1142, 110)) drawHoverEffect(994, 8, 1142, 110, 20);
+        if (inBox(mx, my, 1150, 8, 1258, 110)) drawHoverEffect(1150, 8, 1258, 110, 20);
+      }
+
+      drawTextOutlined("Quà tặng", 931, 91, 15, "#ffffff", "#0f2855");
+      drawTextOutlined("Bảng xếp hạng", 1068, 91, 15, "#ffffff", "#0f2855");
+      drawTextOutlined("Trợ giúp", 1205, 91, 15, "#ffffff", "#0f2855");
+
+      for (let i = 0; i < 6; i++) {
+        const isl = islands[i];
+        const city = state.cities[i];
+        const hov = canHover && inBox(mx, my, isl.x1, isl.y1, isl.x2, isl.y2);
+        if (hov) drawHoverEffect(isl.x1, isl.y1, isl.x2, isl.y2, 32);
+
+        const fontPx = (i === 4) ? 15 : 17;
+        drawTextOutlined(city.name, isl.cx, isl.cy, fontPx, hov ? "#fff387" : "#ffffff", "#0a2352");
+
+        if (city.completed) {
+          drawTextOutlined(`★ ${city.bestScore}/5`, isl.cx, isl.cy - 30, 15, "#78ff96", "#0a2d14");
+        }
+      }
+
+      drawWrappedText("Hoàn thành nhiệm vụ để xây dựng thành phố ngày càng hiện đại hơn nhé!", 306, 655, 345, 22, 16, "#ffffff", "#0c2652");
+    }
+
+    // Vẽ Màn hình 4: Popup Nhiệm vụ hôm nay
+    function renderMissionPopup() {
+      if (!state.showMissionPopup) return;
+      const mx = state.mouseX, my = state.mouseY;
+      const city = state.cities[state.selectedCity];
+
+      ctx.fillStyle = "rgba(0, 0, 0, 0.65)";
+      ctx.fillRect(0, 0, 1280, 720);
+
+      ctx.drawImage(images.popup, 0, 0, 1280, 720);
+      const thumbImg = images["thumb" + state.selectedCity];
+      if (thumbImg) {
+        ctx.drawImage(thumbImg, 98, 164, 396, 234);
+        drawRoundRect(98, 164, 98 + 396, 164 + 234, 18, null, "#6ee7ff", 2.5);
+      }
+
+      drawTextOutlined("Nhiệm vụ hôm nay", 644, 85, 34, "#fffcd7", "#82370a");
+      drawTextOutlined("Phần thưởng", 303, 444, 24, "#fff5be", "#0f2d5f");
+
+      drawTextOutlined("+" + city.rewardStars, 162, 578, 22, "#fff078", "#142d5a");
+      drawTextOutlined("+" + city.rewardXp, 297, 578, 22, "#8cf5ff", "#142d5a");
+      drawTextOutlined("Huy hiệu", 433, 572, 15, "#ffffff", "#142d5a");
+      drawTextOutlined("Tri thức", 433, 592, 15, "#ffe66e", "#142d5a");
+
+      drawTextOutlined(city.name, 540, 185, 31, "#ffeb73", "#0f2d5f", "left");
+
+      drawPillButton(1055, 162, 1105, 208, "<", "#195fb9", "#78dcff", inBox(mx, my, 1055, 162, 1105, 208), 20);
+      drawPillButton(1112, 162, 1162, 208, ">", "#195fb9", "#78dcff", inBox(mx, my, 1112, 162, 1162, 208), 20);
+
+      drawWrappedText(city.desc, 540, 278, 600, 30, 21, "#ffffff", "#0f2855", "left");
+      drawTextOutlined("Nhiệm vụ cụ thể:", 713, 382, 24, "#fff8d2", "#0f3269");
+
+      for (let i = 0; i < 3; i++) {
+        drawTextOutlined(city.missions[i], 602, 434 + i * 40, 21, "#ffffff", "#0c2652", "left");
+      }
+
+      if (inBox(mx, my, 776, 552, 1174, 646)) {
+        drawHoverEffect(776, 552, 1174, 646, 44);
+      }
+      drawTextOutlined("Bắt đầu", 976, 598, 34, "#ffffff", "#8c3205");
+
+      if (Math.hypot(mx - 1188, my - 92) <= 48) {
+        drawHoverEffect(1144, 48, 1232, 136, 44);
+      }
+    }
+
+    // Vẽ Màn hình 5: Màn chơi Trắc nghiệm (Quiz Gameplay)
+    function renderQuiz() {
+      ctx.drawImage(images.quiz, 0, 0, 1280, 720);
+      const mx = state.mouseX, my = state.mouseY;
+      const city = state.cities[state.selectedCity];
+      const qz = state.quiz;
+      const curQ = city.questions[qz.qIndex];
+
+      drawPillButton(18, 12, 142, 62, "< Bản đồ", "#1858b4", "#78e1ff", inBox(mx, my, 18, 12, 142, 62), 17);
+
+      const secs = Math.ceil(qz.timeLeft);
+      const mm = "0" + Math.floor(secs / 60);
+      const ss = (secs % 60 < 10 ? "0" : "") + (secs % 60);
+      drawTextOutlined(`${mm}:${ss}`, 232, 41, 25, secs <= 10 ? "#ff6e6e" : "#ffffff", "#0f2a5c");
+
+      drawTextOutlined(`Câu ${qz.qIndex + 1} / ${city.questions.length}`, 616, 40, 25, "#ffffff", "#0f2a5c");
+      drawTextOutlined(`${city.name}  |  Đúng: ${qz.correctCount}/${city.questions.length}`, 1070, 82, 17, "#fff082", "#0c2350");
+
+      drawWrappedText(curQ.q, 725, 228, 860, 36, 25, "#ffffff", "#0c2655");
+
+      for (let i = 0; i < 4; i++) {
+        const b = quizBoxes[i];
+        const cx = (b.x1 + b.x2) / 2;
+        const cy = (b.y1 + b.y2) / 2;
+
+        if (!qz.answered) {
+          if (inBox(mx, my, b.x1, b.y1, b.x2, b.y2)) drawHoverEffect(b.x1, b.y1, b.x2, b.y2, 36);
+        } else {
+          if (i === curQ.ans) {
+            drawRoundRect(b.x1, b.y1, b.x2, b.y2, 36, "rgba(46, 213, 115, 0.38)", "#7bed9f", 3.5);
+          } else if (i === qz.selectedOption) {
+            drawRoundRect(b.x1, b.y1, b.x2, b.y2, 36, "rgba(255, 71, 87, 0.38)", "#ff6b81", 3.5);
+          }
+        }
+
+        const txtCol = (qz.answered && i === curQ.ans) ? "#a8ffb8" : "#ffffff";
+        drawTextOutlined(curQ.options[i], cx, cy, 21, txtCol, "#0c2655");
+      }
+
+      drawWrappedText(qz.robotMsg, 700, 618, 575, 26, 20, qz.answered ? "#fff591" : "#ffffff", "#0c2655");
+
+      if (qz.answered && !qz.finished) {
+        const nextLbl = (qz.qIndex + 1 < city.questions.length) ? "Câu tiếp >>" : "Kết quả >>";
+        drawPillButton(1020, 582, 1255, 652, nextLbl, "#f08214", "#fff08c", inBox(mx, my, 1020, 582, 1255, 652), 22);
+      }
+
+      if (qz.finished) {
+        ctx.fillStyle = "rgba(0,0,0,0.75)";
+        ctx.fillRect(0, 0, 1280, 720);
+        drawRoundRect(280, 120, 1000, 600, 36, "rgba(16, 48, 110, 0.96)", "#ffe164", 3);
+
+        const passed = qz.correctCount >= 4;
+        drawTextOutlined(passed ? "HOÀN THÀNH XUẤT SẮC!" : "KẾT QUẢ NHIỆM VỤ", 640, 185, 34, "#fff078", "#782d05");
+        drawTextOutlined(city.name, 640, 250, 26, "#8cf0ff", "#0a2350");
+        drawTextOutlined(`Số câu trả lời đúng: ${qz.correctCount} / ${city.questions.length}`, 640, 305, 24, "#ffffff", "#0a2350");
+
+        if (passed) {
+          drawTextOutlined(`Phần thưởng: +${city.rewardStars} Sao   |   +${city.rewardXp} XP`, 640, 365, 22, "#ffeb6e", "#0a2350");
+          drawTextOutlined(`Đã mở khóa: ${city.badgeName}!`, 640, 415, 22, "#78ff9b", "#0a2d19");
+        } else {
+          drawTextOutlined(`Phần thưởng khuyến khích: +${qz.correctCount * 3} Sao   |   +${qz.correctCount * 5} XP`, 640, 365, 22, "#ffeb6e", "#0a2350");
+          drawTextOutlined("Hãy trả lời đúng ít nhất 4/5 câu để nhận Huy hiệu nhé!", 640, 415, 20, "#ffc88c", "#50190a");
+        }
+
+        drawPillButton(370, 495, 610, 560, "Chơi lại", "#1c64c3", "#82e6ff", inBox(mx, my, 370, 495, 610, 560), 23);
+        drawPillButton(670, 495, 910, 560, "Về Bản đồ", "#f08214", "#fff082", inBox(mx, my, 670, 495, 910, 560), 23);
+      }
+    }
+
+    // Vẽ các bảng Modal phụ (Thành tích, Kho báu Tri thức, Trợ lý AI, Quà tặng, Bảng xếp hạng, Trợ giúp, Cài đặt)
+    function renderSecondaryModal() {
+      if (!state.activeModal) return;
+      const mx = state.mouseX, my = state.mouseY;
+
+      ctx.fillStyle = "rgba(0,0,0,0.72)";
+      ctx.fillRect(0, 0, 1280, 720);
+      drawRoundRect(160, 70, 1120, 655, 36, "rgba(14, 42, 98, 0.96)", "#5ad7ff", 3);
+      drawRoundRect(180, 82, 1100, 148, 26, "#1c5cc3", null);
+      drawPillButton(1035, 88, 1095, 142, "X", "#d73241", "#ffaaaa", inBox(mx, my, 1035, 88, 1095, 142), 20);
+
+      if (state.activeModal === "achievements") {
+        drawTextOutlined("BẢNG THÀNH TÍCH & HUY HIỆU", 640, 115, 30, "#fff082", "#0a2350");
+        const doneCnt = state.cities.filter(c => c.completed).length;
+        drawTextOutlined(`Cấp độ: Lv.${state.playerLevel}   |   Tổng Sao: ${state.playerStars}   |   Thành phố hoàn thành: ${doneCnt}/6`, 640, 175, 20, "#a0f0ff", "#0a1e46");
+
+        for (let i = 0; i < 6; i++) {
+          const col = i % 2, row = Math.floor(i / 2);
+          const bx1 = 200 + col * 450, by1 = 210 + row * 115;
+          const c = state.cities[i];
+          drawRoundRect(bx1, by1, bx1 + 430, by1 + 100, 20, c.completed ? "#166955" : "#163a7d", c.completed ? "#6effa0" : "#50a5eb", 2);
+          drawTextOutlined(c.badgeName, bx1 + 20, by1 + 34, 21, "#ffeb78", "#0a1e46", "left");
+          const st = c.completed ? `Đã mở khóa! Điểm cao nhất: ${c.bestScore}/5` : `Chưa mở khóa - Hãy vượt qua ${c.name}`;
+          drawTextOutlined(st, bx1 + 20, by1 + 68, 16, "#ffffff", "#0a1e46", "left");
+        }
+      } else if (state.activeModal === "treasure") {
+        drawTextOutlined("KHO BÁU TRI THỨC 2065", 640, 115, 30, "#fff082", "#0a2350");
+        const tc = state.cities[state.treasurePage];
+        const tImg = images["thumb" + state.treasurePage];
+        if (tImg) {
+          ctx.drawImage(tImg, 210, 195, 396, 234);
+          drawRoundRect(210, 195, 210 + 396, 195 + 234, 18, null, "#78e6ff", 2.5);
+        }
+        drawTextOutlined(tc.treasureTitle, 635, 220, 24, "#ffe66e", "#0a2350", "left");
+        drawWrappedText(tc.treasureFact, 635, 330, 430, 32, 20, "#ffffff", "#0a2350", "left");
+
+        drawPillButton(240, 495, 420, 548, "< Thẻ trước", "#1e5fbe", "#78dcff", inBox(mx, my, 240, 495, 420, 548), 19);
+        drawTextOutlined(`Thẻ tri thức ${state.treasurePage + 1} / 6`, 640, 520, 20, "#b4f0ff", "#0a2350");
+        drawPillButton(860, 495, 1040, 548, "Thẻ tiếp >", "#1e5fbe", "#78dcff", inBox(mx, my, 860, 495, 1040, 548), 19);
+      } else if (state.activeModal === "ai_helper") {
+        drawTextOutlined("TRỢ LÝ ROBOT AI TƯƠNG LAI", 640, 115, 30, "#fff082", "#0a2350");
+        drawTextOutlined(`Xin chào ${state.playerName}! Mình là Robot AI 2065.`, 640, 200, 24, "#8cf5ff", "#0a2350");
+        drawRoundRect(230, 245, 1050, 450, 28, "#144491", "#6ee1ff", 2.5);
+        drawWrappedText(state.aiTips[state.aiTipIndex], 640, 348, 760, 36, 23, "#ffffff", "#0a2350");
+        drawPillButton(460, 485, 820, 545, "Xem gợi ý tiếp theo >>", "#eb8719", "#ffeb82", inBox(mx, my, 460, 485, 820, 545), 21);
+      } else if (state.activeModal === "gift") {
+        drawTextOutlined("QUÀ TẶNG KHÁM PHÁ MỖI NGÀY", 640, 115, 30, "#fff082", "#0a2350");
+        drawTextOutlined("Phần thưởng dành cho Nhà Khám Phá Chăm Chỉ:", 640, 230, 24, "#ffffff", "#0a2350");
+        drawTextOutlined("+50 Ngôi sao Tri thức   &   +30 XP", 640, 320, 32, "#ffeb64", "#78320a");
+        if (!state.dailyGiftClaimed) {
+          drawPillButton(460, 440, 820, 515, "NHẬN QUÀ NGAY!", "#f08214", "#fff082", inBox(mx, my, 460, 440, 820, 515), 24);
+        } else {
+          drawTextOutlined("Bạn đã nhận quà hôm nay rồi! Hãy tiếp tục khám phá 6 thành phố nhé!", 640, 475, 22, "#82ffa0", "#0a2d19");
+        }
+      } else if (state.activeModal === "leaderboard") {
+        drawTextOutlined("BẢNG XẾP HẠNG NHÀ KHÁM PHÁ", 640, 115, 30, "#fff082", "#0a2350");
+        const leaders = [
+          { name: "1. Lan Anh - Chuyên gia AI", stars: 260, lv: 4 },
+          { name: "2. Hoàng Nam - Kiện tướng Toán", stars: 210, lv: 3 },
+          { name: `3. ${state.playerName} (Bạn)`, stars: state.playerStars, lv: state.playerLevel, me: true },
+          { name: "4. Bảo Ngọc - Đại sứ Xanh", stars: 110, lv: 1 },
+          { name: "5. Quốc Khánh - Nhà Sử học trẻ", stars: 95, lv: 1 }
+        ];
+        for (let i = 0; i < 5; i++) {
+          const ly = 195 + i * 72;
+          const ld = leaders[i];
+          drawRoundRect(240, ly, 1040, ly + 58, 18, ld.me ? "#2373c3" : "#143a7d", ld.me ? "#ffeb6e" : "#50aaf0", 2);
+          drawTextOutlined(ld.name, 270, ly + 29, 21, ld.me ? "#fff582" : "#ffffff", "#0a1e46", "left");
+          drawTextOutlined(`Lv.${ld.lv}  |  ${ld.stars} Sao`, 1010, ly + 29, 21, "#ffe664", "#0a1e46", "right");
+        }
+      } else if (state.activeModal === "help") {
+        drawTextOutlined("HƯỚNG DẪN CHƠI GAME", 640, 115, 30, "#fff082", "#0a2350");
+        const lines = [
+          "1. Tại Sảnh nhân vật (Hub): Xem cấp độ, kinh nghiệm (XP), số Sao, mở Kho báu Tri thức",
+          "   hoặc trò chuyện cùng Trợ lý Robot AI.",
+          "2. Tại Bản đồ Thành phố: Nhấn vào bất kỳ đảo nào trong 6 Thành phố (Toán học, Ngôn ngữ,",
+          "   Khoa học, Thành phố Xanh, Lịch sử - Văn hóa, Trung tâm AI) để mở Nhiệm vụ hôm nay.",
+          "3. Tại Màn chơi Trắc nghiệm: Chọn đáp án đúng A, B, C, D trước khi hết 45 giây.",
+          "   Trả lời đúng từ 4/5 câu để mở khóa trọn bộ Sao, XP và Huy hiệu Tri thức!"
+        ];
+        lines.forEach((ln, idx) => {
+          drawTextOutlined(ln, 220, 215 + idx * 52, 20, "#ffffff", "#0a1e46", "left");
+        });
+      } else if (state.activeModal === "settings") {
+        drawTextOutlined("CÀI ĐẶT HỆ THỐNG", 640, 115, 30, "#fff082", "#0a2350");
+        drawPillButton(450, 260, 830, 320, "Âm thanh & Giọng đọc: " + (state.soundEnabled ? "BẬT" : "TẮT"), "#1c5fb9", "#78dcff", inBox(mx, my, 450, 260, 830, 320), 22);
+        drawPillButton(450, 345, 830, 405, "Nhạc nền: " + (state.musicEnabled ? "BẬT" : "TẮT"), "#1c5fb9", "#78dcff", inBox(mx, my, 450, 345, 830, 405), 22);
+        drawPillButton(450, 430, 830, 490, "Chế độ Toàn màn hình (Fullscreen)", "#1c5fb9", "#78dcff", inBox(mx, my, 450, 430, 830, 490), 22);
+      }
+
+      drawPillButton(530, 585, 750, 638, "Đóng", "#dc4b28", "#ffdc96", inBox(mx, my, 530, 585, 750, 638), 22);
+    }
+
+    // Xử lý sự kiện chuột trên Canvas 1280x720
+    function getCanvasCoords(e) {
+      const rect = canvas.getBoundingClientRect();
+      return {
+        x: (e.clientX - rect.left) * (1280 / rect.width),
+        y: (e.clientY - rect.top) * (720 / rect.height)
+      };
+    }
+
+    canvas.addEventListener("mousemove", e => {
+      const pt = getCanvasCoords(e);
+      state.mouseX = pt.x;
+      state.mouseY = pt.y;
+    });
+
+    canvas.addEventListener("click", e => {
+      const pt = getCanvasCoords(e);
+      const mx = pt.x, my = pt.y;
+      state.mouseX = mx;
+      state.mouseY = my;
+
+      // 1. Nếu đang mở Modal phụ
+      if (state.activeModal) {
+        if (inBox(mx, my, 1030, 82, 1105, 145) || inBox(mx, my, 530, 585, 750, 638)) {
+          sfxClick();
+          state.activeModal = "";
+          return;
+        }
+        if (state.activeModal === "gift" && !state.dailyGiftClaimed && inBox(mx, my, 460, 440, 820, 515)) {
+          sfxCorrect();
+          state.dailyGiftClaimed = true;
+          addRewards(50, 30);
+          return;
+        }
+        if (state.activeModal === "ai_helper" && inBox(mx, my, 460, 485, 820, 545)) {
+          sfxClick();
+          state.aiTipIndex = (state.aiTipIndex + 1) % state.aiTips.length;
+          speakVietnamese(state.aiTips[state.aiTipIndex]);
+          return;
+        }
+        if (state.activeModal === "treasure") {
+          if (inBox(mx, my, 240, 495, 420, 548)) {
+            sfxClick();
+            state.treasurePage = (state.treasurePage + 5) % 6;
+            return;
+          }
+          if (inBox(mx, my, 860, 495, 1040, 548)) {
+            sfxClick();
+            state.treasurePage = (state.treasurePage + 1) % 6;
+            return;
+          }
+        }
+        if (state.activeModal === "settings") {
+          if (inBox(mx, my, 450, 260, 830, 320)) { toggleSound(); return; }
+          if (inBox(mx, my, 450, 345, 830, 405)) { sfxClick(); state.musicEnabled = !state.musicEnabled; return; }
+          if (inBox(mx, my, 450, 430, 830, 490)) { sfxClick(); toggleFullScreen(); return; }
+        }
+        return;
+      }
+
+      // 2. Nếu đang mở Popup Nhiệm vụ hôm nay (Screen 4)
+      if (state.showMissionPopup) {
+        if (Math.hypot(mx - 1188, my - 92) <= 48) {
+          sfxClick();
+          state.showMissionPopup = false;
+          updateTopbarButtons();
+          return;
+        }
+        if (inBox(mx, my, 1055, 162, 1105, 208)) {
+          sfxClick();
+          state.selectedCity = (state.selectedCity + 5) % 6;
+          return;
+        }
+        if (inBox(mx, my, 1112, 162, 1162, 208)) {
+          sfxClick();
+          state.selectedCity = (state.selectedCity + 1) % 6;
+          return;
+        }
+        if (inBox(mx, my, 776, 552, 1174, 646)) {
+          sfxCorrect();
+          state.showMissionPopup = false;
+          switchScreen("quiz");
+          return;
+        }
+        return;
+      }
+
+      // 3. Tương tác theo từng màn hình
+      if (state.screen === "menu") {
+        if (inBox(mx, my, 816, 376, 1244, 478)) { switchScreen("hub"); return; }
+        if (inBox(mx, my, 930, 490, 1188, 558)) { sfxClick(); state.activeModal = "achievements"; return; }
+        if (inBox(mx, my, 930, 562, 1188, 630)) { sfxClick(); state.activeModal = "settings"; return; }
+        if (inBox(mx, my, 930, 634, 1188, 702)) { sfxClick(); alert("Cảm ơn bạn đã trải nghiệm Thành phố Tri thức 2065!"); return; }
+        if (inBox(mx, my, 1045, 18, 1262, 66))   { switchScreen("map"); return; }
+      } else if (state.screen === "hub") {
+        if (inBox(mx, my, 896, 120, 1268, 238)) { sfxClick(); state.showMissionPopup = true; updateTopbarButtons(); return; }
+        if (inBox(mx, my, 896, 246, 1268, 360)) { sfxClick(); state.activeModal = "treasure"; return; }
+        if (inBox(mx, my, 896, 368, 1268, 482)) { sfxClick(); state.activeModal = "achievements"; return; }
+        if (inBox(mx, my, 896, 490, 1268, 604)) { sfxClick(); state.activeModal = "ai_helper"; speakVietnamese(state.aiTips[state.aiTipIndex]); return; }
+        if (inBox(mx, my, 42, 578, 758, 692)) {
+          sfxClick();
+          state.hubSpeechIndex = (state.hubSpeechIndex + 1) % state.hubSpeeches.length;
+          speakVietnamese(state.hubSpeeches[state.hubSpeechIndex]);
+          return;
+        }
+        if (inBox(mx, my, 1170, 18, 1248, 82))  { sfxClick(); state.activeModal = "gift"; return; }
+        if (inBox(mx, my, 780, 618, 1264, 692)) { switchScreen("map"); return; }
+        if (inBox(mx, my, 730, 20, 915, 76))    { switchScreen("menu"); return; }
+      } else if (state.screen === "map") {
+        if (inBox(mx, my, 18, 8, 158, 138) || inBox(mx, my, 415, 18, 615, 70)) { switchScreen("hub"); return; }
+        if (inBox(mx, my, 295, 65, 345, 108) || inBox(mx, my, 876, 8, 986, 110)) { sfxClick(); state.activeModal = "gift"; return; }
+        if (inBox(mx, my, 994, 8, 1142, 110))  { sfxClick(); state.activeModal = "leaderboard"; return; }
+        if (inBox(mx, my, 1150, 8, 1258, 110)) { sfxClick(); state.activeModal = "help"; return; }
+
+        for (let i = 0; i < 6; i++) {
+          const isl = islands[i];
+          if (inBox(mx, my, isl.x1, isl.y1, isl.x2, isl.y2)) {
+            sfxClick();
+            state.selectedCity = i;
+            state.showMissionPopup = true;
+            updateTopbarButtons();
+            return;
+          }
+        }
+      } else if (state.screen === "quiz") {
+        if (inBox(mx, my, 18, 12, 142, 62)) { switchScreen("map"); return; }
+
+        const city = state.cities[state.selectedCity];
+        const qz = state.quiz;
+
+        if (qz.finished) {
+          if (inBox(mx, my, 370, 495, 610, 560)) { sfxClick(); resetQuiz(); return; }
+          if (inBox(mx, my, 670, 495, 910, 560)) { switchScreen("map"); return; }
+          return;
+        }
+
+        if (!qz.answered) {
+          const curQ = city.questions[qz.qIndex];
+          for (let i = 0; i < 4; i++) {
+            const b = quizBoxes[i];
+            if (inBox(mx, my, b.x1, b.y1, b.x2, b.y2)) {
+              qz.selectedOption = i;
+              qz.answered = true;
+              if (i === curQ.ans) {
+                sfxCorrect();
+                qz.correctCount++;
+                addRewards(5, 5);
+                qz.robotMsg = curQ.explain;
+              } else {
+                sfxWrong();
+                qz.robotMsg = "Chưa chính xác! " + curQ.explain;
+              }
+              speakVietnamese(qz.robotMsg);
+              return;
+            }
+          }
+        } else {
+          if (inBox(mx, my, 1020, 582, 1255, 652) || inBox(mx, my, 388, 568, 1012, 668)) {
+            sfxClick();
+            if (qz.qIndex + 1 < city.questions.length) {
+              qz.qIndex++;
+              qz.selectedOption = -1;
+              qz.answered = false;
+              qz.timeLeft = 45.0;
+              qz.robotMsg = "Hãy chọn đáp án đúng nhé!";
+            } else {
+              qz.finished = true;
+              if (!qz.rewardGranted) {
+                qz.rewardGranted = true;
+                if (qz.correctCount > city.bestScore) city.bestScore = qz.correctCount;
+                if (qz.correctCount >= 4) {
+                  city.completed = true;
+                  addRewards(city.rewardStars, city.rewardXp);
+                  sfxCorrect();
+                } else {
+                  addRewards(qz.correctCount * 3, qz.correctCount * 5);
+                }
+              }
+            }
+            return;
+          }
+        }
+      }
+    });
+
+    // Vòng lặp thời gian & render 60 FPS
+    let lastTime = performance.now();
+    function gameLoop(now) {
+      const dt = (now - lastTime) / 1000;
+      lastTime = now;
+
+      if (state.screen === "quiz" && !state.quiz.answered && !state.quiz.finished) {
+        state.quiz.timeLeft -= dt;
+        if (state.quiz.timeLeft <= 0) {
+          state.quiz.timeLeft = 0;
+          state.quiz.answered = true;
+          state.quiz.selectedOption = -1;
+          const curQ = state.cities[state.selectedCity].questions[state.quiz.qIndex];
+          state.quiz.robotMsg = "Hết giờ rồi! " + curQ.explain;
+          sfxWrong();
+        }
+      }
+
+      ctx.clearRect(0, 0, 1280, 720);
+      if (loadedCount < totalImages) {
+        drawTextOutlined("Đang tải tài nguyên Thành phố Tri thức 2065...", 640, 360, 28, "#ffffff", "#0b2454");
+      } else {
+        if (state.screen === "menu") renderMenu();
+        else if (state.screen === "hub") renderHub();
+        else if (state.screen === "map") renderMap();
+        else if (state.screen === "quiz") renderQuiz();
+
+        renderMissionPopup();
+        renderSecondaryModal();
+      }
+
+      requestAnimationFrame(gameLoop);
+    }
+    requestAnimationFrame(gameLoop);
+  </script>
+</body>
+</html>
